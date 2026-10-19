@@ -17,7 +17,7 @@ concurrency:
 
 env:
   COSESIGNTOOL_VERSION: "v1.7.6-pre2"
-  COSESIGNTOOL_TOOLS_DIR: ${{ github.workspace }}\.tools\cosesigntool
+  COSESIGNTOOL_TOOLS_DIR: ${{ github.workspace }}/.tools/cosesigntool
 
 jobs:
   check:
