@@ -1,12 +1,12 @@
 {
   "format": 1,
-  "seq": 0,
-  "upstream_sha": "",
-  "upstream_commit_time": "",
-  "state_hash": "",
-  "snapshot_seq": 0,
-  "snapshot_sha256": "",
-  "snapshot_size": 0,
-  "published": 0,
-  "entry_count": 0
+  "seq": 1,
+  "upstream_sha": "c075548ad9f9c7b39e2e7df2f77086228244d65d",
+  "upstream_commit_time": "2026-10-19T06:53:50Z",
+  "state_hash": "53ba7125c3ae3547b470b07e716c0f4834fd50b9a1a0e5c3bef283c15dda056e",
+  "snapshot_seq": 1,
+  "snapshot_sha256": "4f4125a1b2feba40804d84ea828f41b16e17fa23efe98f6c4353fe4dc964c088",
+  "snapshot_size": 1669915,
+  "published": 1792393146,
+  "entry_count": 222214
 }
