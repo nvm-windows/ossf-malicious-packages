@@ -526,7 +526,9 @@ def main() -> int:
     approvals_path = args.policy / "approvals.json"
     if approvals_path.is_file():
         approvals = json.loads(approvals_path.read_text(encoding="utf-8"))
-    if oversize and not approvals.get("publish_oversize"):
+    # The first snapshot is the whole dataset, so it is over the hourly size guard.
+    # Later runs still hold until publish_oversize is set.
+    if oversize and previous_seq != 0 and not approvals.get("publish_oversize"):
         holds.append({"reason": "size", "upserts": len(upserts), "removals": len(removals)})
     if any(item.get("reason") == "size" for item in holds):
         status = {"outcome": "held", "holds": holds, "seq": seq, "entry_count": len(entries)}

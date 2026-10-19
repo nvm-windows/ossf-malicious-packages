@@ -63,8 +63,14 @@ jobs:
 
       - name: Clone OpenSSF malicious packages
         run: |
-          git clone --filter=blob:none --sparse --depth 1 https://github.com/ossf/malicious-packages.git upstream
-          git -C upstream sparse-checkout set osv/malicious/npm osv/withdrawn/npm
+          $PSNativeCommandUseErrorActionPreference = $true
+          # --no-checkout avoids Windows failing on ':' in unrelated Maven paths.
+          git clone --filter=blob:none --sparse --depth 1 --no-checkout https://github.com/ossf/malicious-packages.git upstream
+          git -C upstream sparse-checkout set --cone osv/malicious/npm osv/withdrawn/npm
+          git -C upstream checkout
+          if (-not (Test-Path -LiteralPath "upstream/osv/malicious/npm" -PathType Container)) {
+            throw "sparse checkout did not materialize osv/malicious/npm"
+          }
           git -C upstream rev-parse HEAD | Set-Content -Encoding ascii upstream-sha.txt
           git -C upstream show -s --format=%cI HEAD | Set-Content -Encoding ascii upstream-time.txt
 
@@ -95,6 +101,7 @@ jobs:
             $buildArgs += @("--previous", "state/entries.cbor.gz")
           }
           python @buildArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $status = Get-Content dist/status.json -Raw | ConvertFrom-Json
           "outcome=$($status.outcome)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
