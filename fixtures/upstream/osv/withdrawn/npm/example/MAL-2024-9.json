@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.5.0",
+  "id": "MAL-2024-9",
+  "modified": "2024-01-03T00:00:00Z",
+  "withdrawn": "2024-01-04T00:00:00Z",
+  "affected": [
+    {
+      "package": { "ecosystem": "npm", "name": "example" },
+      "versions": ["9.9.9"]
+    }
+  ]
+}

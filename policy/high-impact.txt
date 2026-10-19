@@ -1,0 +1,8 @@
+# One npm package name per line. An ALL block for one of these names is held
+# until that MAL ID is listed in approvals.json.
+react
+lodash
+express
+axios
+webpack
+typescript

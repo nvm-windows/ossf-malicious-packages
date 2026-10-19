@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.5.0",
+  "id": "MAL-2024-2",
+  "modified": "2024-01-02T00:00:00Z",
+  "affected": [
+    {
+      "package": { "ecosystem": "npm", "name": "example" },
+      "versions": ["1.2.3"]
+    }
+  ]
+}
