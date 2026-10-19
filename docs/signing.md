@@ -18,4 +18,4 @@ The R2 objects are:
 - `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/snapshot/<seq>.cbor.gz`
 - `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/delta/<seq>.cbor.gz`
 
-`head.cose` is uploaded last. Its cache lifetime is 5 minutes. Snapshots and deltas are immutable.
+`head.cose` is uploaded last. Its cache lifetime is 60 minutes, which is the shortest time between publishes. Snapshots and deltas do not change, and their cache lifetime is 30 days.

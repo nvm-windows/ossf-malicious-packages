@@ -109,7 +109,8 @@ def main() -> int:
         raise SystemExit("missing R2 env: " + ", ".join(missing))
     endpoint = endpoint.rstrip("/")
     root = Path(sys.argv[1])
-    immutable = "public, max-age=31536000, immutable"
+    # Snapshots and deltas are immutable. They are deleted after 30 days.
+    immutable = "public, max-age=2592000, immutable"
     uploads: list[tuple[str, Path, str]] = []
     for path in sorted((root / "v1" / "snapshot").glob("*.cbor.gz")):
         uploads.append((f"{PREFIX}/v1/snapshot/{path.name}", path, immutable))
@@ -121,7 +122,7 @@ def main() -> int:
     for key, path, cache_control in uploads:
         put_object(endpoint, access_key, secret_key, key, path.read_bytes(), cache_control)
         print(f"uploaded {key}")
-    put_object(endpoint, access_key, secret_key, f"{PREFIX}/v1/head.cose", head.read_bytes(), "public, max-age=300")
+    put_object(endpoint, access_key, secret_key, f"{PREFIX}/v1/head.cose", head.read_bytes(), "public, max-age=3600")
     print(f"uploaded {PREFIX}/v1/head.cose")
     return 0
 
