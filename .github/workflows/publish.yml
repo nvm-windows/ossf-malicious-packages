@@ -47,11 +47,11 @@ jobs:
     name: Generate and publish
     needs: check
     if: github.event_name != 'pull_request'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     environment: publish
     defaults:
       run:
-        shell: pwsh
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -63,16 +63,14 @@ jobs:
 
       - name: Clone OpenSSF malicious packages
         run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          # --no-checkout avoids Windows failing on ':' in unrelated Maven paths.
+          set -euo pipefail
           git clone --filter=blob:none --sparse --depth 1 --no-checkout https://github.com/ossf/malicious-packages.git upstream
           git -C upstream sparse-checkout set --cone osv/malicious/npm osv/withdrawn/npm
           git -C upstream checkout
-          if (-not (Test-Path -LiteralPath "upstream/osv/malicious/npm" -PathType Container)) {
-            throw "sparse checkout did not materialize osv/malicious/npm"
-          }
-          git -C upstream rev-parse HEAD | Set-Content -Encoding ascii upstream-sha.txt
-          git -C upstream show -s --format=%cI HEAD | Set-Content -Encoding ascii upstream-time.txt
+          test -d upstream/osv/malicious/npm
+          test -d upstream/osv/withdrawn/npm
+          git -C upstream rev-parse HEAD > upstream-sha.txt
+          git -C upstream show -s --format=%cI HEAD > upstream-time.txt
 
       - name: Restore previous entries
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -83,27 +81,17 @@ jobs:
       - name: Build the feed
         id: build
         run: |
-          $published = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-          $sha = (Get-Content upstream-sha.txt -Raw).Trim()
-          $time = (Get-Content upstream-time.txt -Raw).Trim()
-          $buildArgs = @(
-            "scripts/build_feed.py",
-            "--upstream", "upstream",
-            "--policy", "policy",
-            "--state", "state.json",
-            "--out", "dist",
-            "--production",
-            "--published", "$published",
-            "--upstream-sha", $sha,
-            "--upstream-commit-time", $time
-          )
-          if (Test-Path -LiteralPath "state/entries.cbor.gz" -PathType Leaf) {
-            $buildArgs += @("--previous", "state/entries.cbor.gz")
-          }
-          python @buildArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $status = Get-Content dist/status.json -Raw | ConvertFrom-Json
-          "outcome=$($status.outcome)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          set -euo pipefail
+          published="$(date -u +%s)"
+          sha="$(tr -d '[:space:]' < upstream-sha.txt)"
+          time="$(tr -d '[:space:]' < upstream-time.txt)"
+          args=(scripts/build_feed.py --upstream upstream --policy policy --state state.json --out dist --production --published "$published" --upstream-sha "$sha" --upstream-commit-time "$time")
+          if [[ -f state/entries.cbor.gz ]]; then
+            args+=(--previous state/entries.cbor.gz)
+          fi
+          python "${args[@]}"
+          outcome="$(python -c 'import json; print(json.load(open("dist/status.json"))["outcome"])')"
+          echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
 
       - name: Upload generated files
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -117,36 +105,37 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $status = Get-Content dist/status.json -Raw | ConvertFrom-Json
-          $body = @"
-          The publish at seq $($status.seq) is held.
-          Entry count: $($status.entry_count)
-          Set publish_oversize to true in policy/approvals.json only after the size is reviewed. High-impact ALL blocks stay out until their MAL IDs are listed in mal_ids.
-          "@
-          gh label create feed-review --color B60205 --description "Feed publish needs a person" 2>$null
-          $existing = gh issue list --label feed-review --state open --json number --jq ".[0].number"
-          if ($existing) {
-            gh issue comment $existing --body $body
-          } else {
-            gh issue create --title "Feed publish held" --label feed-review --body $body
-          }
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          status = json.load(open("dist/status.json"))
+          open("hold-body.txt", "w", encoding="utf-8").write(
+              f"The publish at seq {status.get('seq')} is held.\n"
+              f"Entry count: {status.get('entry_count')}\n"
+              "Set publish_oversize to true in policy/approvals.json only after the size is reviewed. "
+              "High-impact ALL blocks stay out until their MAL IDs are listed in mal_ids.\n"
+          )
+          PY
+          gh label create feed-review --color B60205 --description "Feed publish needs a person" || true
+          existing="$(gh issue list --label feed-review --state open --json number --jq '.[0].number')"
+          if [[ -n "$existing" && "$existing" != "null" ]]; then
+            gh issue comment "$existing" --body-file hold-body.txt
+          else
+            gh issue create --title "Feed publish held" --label feed-review --body-file hold-body.txt
+          fi
 
       - name: Install CoseSignTool
         if: steps.build.outputs.outcome == 'ready'
         run: |
-          $toolsDir = $env:COSESIGNTOOL_TOOLS_DIR
-          $exe = Join-Path $toolsDir "CoseSignTool.exe"
-          New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
-          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-            $url = "https://github.com/microsoft/CoseSignTool/releases/download/$($env:COSESIGNTOOL_VERSION)/CoseSignTool-Windows-release.zip"
-            $zipPath = Join-Path $env:RUNNER_TEMP "CoseSignTool.zip"
-            Invoke-WebRequest -Uri $url -OutFile $zipPath
-            $extractDir = Join-Path $env:RUNNER_TEMP "cosesigntool"
-            Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
-            $extracted = Get-ChildItem -LiteralPath $extractDir -Filter "CoseSignTool.exe" -Recurse -File | Select-Object -First 1
-            Copy-Item -LiteralPath $extracted.FullName -Destination $exe -Force
-            Get-ChildItem -LiteralPath $extracted.Directory.FullName -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $toolsDir $_.Name) -Force }
-          }
+          set -euo pipefail
+          mkdir -p "$COSESIGNTOOL_TOOLS_DIR"
+          zip="$RUNNER_TEMP/CoseSignTool.zip"
+          curl -fsSL -o "$zip" "https://github.com/microsoft/CoseSignTool/releases/download/${COSESIGNTOOL_VERSION}/CoseSignTool-Linux-release.zip"
+          unzip -q "$zip" -d "$RUNNER_TEMP/cosesigntool"
+          found="$(find "$RUNNER_TEMP/cosesigntool" -type f -name CoseSignTool | head -n 1)"
+          test -n "$found"
+          cp -a "$(dirname "$found")/." "$COSESIGNTOOL_TOOLS_DIR/"
+          chmod +x "$COSESIGNTOOL_TOOLS_DIR/CoseSignTool"
 
       - name: Azure login
         if: steps.build.outputs.outcome == 'ready'
@@ -163,7 +152,8 @@ jobs:
           ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}
           ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
         run: |
-          & .\scripts\Sign-Head.ps1 -PayloadPath dist/v1/head-payload.cbor -OutputPath dist/v1/head.cose
+          set -euo pipefail
+          bash scripts/sign-head.sh dist/v1/head-payload.cbor dist/v1/head.cose
 
       - name: Upload to R2
         if: steps.build.outputs.outcome == 'ready'
@@ -177,8 +167,8 @@ jobs:
       - name: Stage entries cache
         if: steps.build.outputs.outcome == 'ready'
         run: |
-          New-Item -ItemType Directory -Force -Path state | Out-Null
-          Copy-Item dist/entries.cbor.gz state/entries.cbor.gz -Force
+          mkdir -p state
+          cp dist/entries.cbor.gz state/entries.cbor.gz
 
       - name: Save entries for the next diff
         if: steps.build.outputs.outcome == 'ready'
@@ -190,11 +180,11 @@ jobs:
       - name: Commit published state
         if: steps.build.outputs.outcome == 'ready'
         run: |
-          Copy-Item dist/state.json state.json -Force
+          set -euo pipefail
+          cp dist/state.json state.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add state.json
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git diff --cached --quiet && exit 0
           git commit -m "chore: record published feed state"
           git push
