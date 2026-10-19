@@ -119,7 +119,7 @@ jobs:
           if [[ -n "$existing" && "$existing" != "null" ]]; then
             gh issue comment "$existing" --body-file hold-body.txt
           else
-            printf '\ncc @coreybutler @gbdrummer\n' >> hold-body.txt
+            printf '\ncc @nvm-windows/secops\n' >> hold-body.txt
             gh issue create --title "Feed publish held" --label feed-review --body-file hold-body.txt
           fi
 
