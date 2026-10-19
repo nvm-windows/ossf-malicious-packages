@@ -10,6 +10,7 @@ permissions:
   contents: write
   id-token: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: publish
@@ -118,10 +119,46 @@ jobs:
           existing="$(gh issue list --label feed-review --state open --json number --jq '.[0].number')"
           if [[ -n "$existing" && "$existing" != "null" ]]; then
             gh issue comment "$existing" --body-file hold-body.txt
+            echo "issue=$existing" >> "$GITHUB_OUTPUT"
           else
             printf '\ncc @nvm-windows/secops\n' >> hold-body.txt
-            gh issue create --title "Feed publish held" --label feed-review --body-file hold-body.txt
+            url="$(gh issue create --title "Feed publish held" --label feed-review --body-file hold-body.txt)"
+            echo "issue=${url##*/}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Open a pull request to approve the hold
+        if: steps.build.outputs.outcome == 'held'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          issue="$(gh issue list --label feed-review --state open --json number --jq '.[0].number')"
+          test -n "$issue" && test "$issue" != "null"
+          seq="$(python -c 'import json; print(json.load(open("dist/status.json"))["seq"])')"
+          open="$(gh pr list --head "hold/seq-${seq}" --state open --json number --jq '.[0].number')"
+          if [[ -n "$open" && "$open" != "null" ]]; then
+            exit 0
+          fi
+          branch="hold/seq-${seq}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            branch="hold/seq-${seq}-${GITHUB_RUN_ID}"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("policy/approvals.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          data["publish_oversize"] = True
+          path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+          git add policy/approvals.json
+          git commit -m "chore: approve the held feed publish"
+          git push -u origin "$branch"
+          pr="$(gh pr create --title "Approve the held feed publish" --body "$(printf 'Sets publish_oversize so the next hourly run can publish sequence %s.\n\nHigh-impact ALL names stay out until their MAL IDs are added to mal_ids.\n\nCloses #%s\n' "$seq" "$issue")")"
+          gh issue comment "$issue" --body "Merging ${pr} closes this issue."
 
       - name: Install CoseSignTool
         if: steps.build.outputs.outcome == 'ready'
@@ -184,6 +221,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add state.json
+          if python -c 'import json,sys; sys.exit(0 if json.load(open("dist/status.json")).get("consumed_oversize") else 1)'; then
+            python - <<'PY'
+            import json
+            from pathlib import Path
+            path = Path("policy/approvals.json")
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["publish_oversize"] = False
+            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            PY
+            git add policy/approvals.json
+          fi
           git diff --cached --quiet && exit 0
           git commit -m "chore: record published feed state"
           git push

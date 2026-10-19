@@ -390,6 +390,16 @@ def diff_entries(old: dict[str, list], new: dict[str, list]) -> tuple[list, list
     return upserts, removals
 
 
+def delta_records(state: dict, snapshot: bool, delta_tuple: list) -> tuple[list, list]:
+    """Deltas listed in head are every one since the snapshot, not only the newest."""
+    if snapshot:
+        return [], []
+    saved = [list(item) for item in state.get("deltas") or []]
+    saved.append([delta_tuple[0], delta_tuple[1].hex(), delta_tuple[2]])
+    head = [[item[0], bytes.fromhex(item[1]), item[2]] for item in saved]
+    return head, saved
+
+
 def write_outputs(args: argparse.Namespace, entries: list, upserts: list, removals: list, seq: int, published: int, snapshot: bool, state: dict) -> dict:
     out = Path(args.out)
     digest = state_hash(entries)
@@ -428,6 +438,7 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
     delta_path = delta_dir / f"{seq}.cbor.gz"
     delta_path.write_bytes(delta_gz)
     delta_tuple = [seq, hashlib.sha256(delta_gz).digest(), len(delta_gz)]
+    head_deltas, saved_deltas = delta_records(state, snapshot, delta_tuple)
     head = cbor({
         KEY_FORMAT: FORMAT,
         KEY_SEQ: seq,
@@ -435,7 +446,7 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
         KEY_EXPIRES: published + HEAD_TTL_SECONDS,
         KEY_STATE_HASH: digest,
         KEY_SNAPSHOT: [snapshot_seq, snapshot_sha, snapshot_size],
-        KEY_DELTAS: [] if snapshot else [delta_tuple],
+        KEY_DELTAS: head_deltas,
         KEY_POLL_INTERVAL: POLL_INTERVAL_SECONDS,
         KEY_MIN_CLIENT: FORMAT,
     })
@@ -455,6 +466,7 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
         "head_payload": str(head_path),
         "entry_count": len(entries),
         "wrote_snapshot": snapshot,
+        "deltas": saved_deltas,
     }
 
 
@@ -473,6 +485,13 @@ def self_test() -> None:
     specs, unknown, considered = affected_to_specs(sample["affected"])
     if unknown or considered != 1 or specs != [("left-pad", spec_all())]:
         raise SystemExit("ALL range was not recognized")
+    empty_head, empty_saved = delta_records({}, True, [1, bytes(32), 4])
+    if empty_head or empty_saved:
+        raise SystemExit("a snapshot must not list older deltas")
+    prior = {"deltas": [[2, "aa" * 32, 10]]}
+    listed, saved = delta_records(prior, False, [3, bytes.fromhex("bb" * 32), 11])
+    if [item[0] for item in listed] != [2, 3] or saved[-1][0] != 3:
+        raise SystemExit("deltas since the snapshot were not kept")
     print("self-test ok")
 
 
@@ -530,6 +549,7 @@ def main() -> int:
         approvals = json.loads(approvals_path.read_text(encoding="utf-8"))
     # The first snapshot is the whole dataset, so it is over the hourly size guard.
     # Later runs still hold until publish_oversize is set.
+    oversize_approved = bool(oversize and previous_seq != 0 and approvals.get("publish_oversize"))
     if oversize and previous_seq != 0 and not approvals.get("publish_oversize"):
         holds.append({"reason": "size", "upserts": len(upserts), "removals": len(removals)})
     if any(item.get("reason") == "size" for item in holds):
@@ -542,6 +562,7 @@ def main() -> int:
         raise SystemExit("--published unix time is required when the feed changes")
     info = write_outputs(args, entries, upserts, removals, seq, published_at, snapshot, state)
     info["outcome"] = "ready"
+    info["consumed_oversize"] = oversize_approved
     info["holds"] = [item for item in holds if item.get("reason") == "high-impact"]
     info["upstream_files"] = stats["files"]
     info["schema_majors"] = stats["schema_majors"]
@@ -557,6 +578,7 @@ def main() -> int:
         "snapshot_size": info["snapshot_size"],
         "published": published_at,
         "entry_count": len(entries),
+        "deltas": info["deltas"],
     }
     (Path(args.out) / "state.json").write_text(json.dumps(next_state, indent=2) + "\n", encoding="utf-8")
     print(f"ready seq={seq} entries={len(entries)}")
