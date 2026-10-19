@@ -237,6 +237,8 @@ def collect(root: Path) -> tuple[dict[str, list], dict]:
     files = 0
     for base in (malicious, withdrawn):
         for path in base.rglob("*.json"):
+            if not path.is_file():
+                continue
             record = load_record(path)
             if record is None:
                 continue
