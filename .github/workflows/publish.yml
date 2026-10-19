@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/build_feed.py --self-test
-          python scripts/build_feed.py --upstream fixtures/upstream --policy policy --state state.json --out dist/fixture --published 1700000000
+          python scripts/build_feed.py --upstream fixtures/upstream --policy policy --state fixtures/state.json --out dist/fixture --published 1700000000
           outcome="$(python -c 'import json; print(json.load(open("dist/fixture/status.json"))["outcome"])')"
           count="$(python -c 'import json; print(json.load(open("dist/fixture/status.json"))["entry_count"])')"
           test "$outcome" = "ready"

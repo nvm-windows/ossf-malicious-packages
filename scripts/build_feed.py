@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -390,6 +391,11 @@ def diff_entries(old: dict[str, list], new: dict[str, list]) -> tuple[list, list
     return upserts, removals
 
 
+def object_stamp(published: int) -> str:
+    """UTC stamp used as the object name. The client formats the published time the same way."""
+    return datetime.fromtimestamp(published, timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+
+
 def write_outputs(args: argparse.Namespace, entries: list, upserts: list, removals: list, seq: int, published: int, snapshot: bool, state: dict) -> dict:
     out = Path(args.out)
     digest = state_hash(entries)
@@ -405,15 +411,17 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
         snapshot_gz = gzip_bytes(snapshot_payload)
         snapshot_dir = out / "v1" / "snapshot"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        snapshot_path = snapshot_dir / f"{seq}.cbor.gz"
+        snapshot_path = snapshot_dir / f"{object_stamp(published)}.cbor.gz"
         snapshot_path.write_bytes(snapshot_gz)
         snapshot_sha = hashlib.sha256(snapshot_gz).digest()
         snapshot_size = len(snapshot_gz)
         snapshot_seq = seq
+        snapshot_published = published
     else:
         snapshot_sha = bytes.fromhex(state["snapshot_sha256"])
         snapshot_size = int(state["snapshot_size"])
         snapshot_seq = int(state["snapshot_seq"])
+        snapshot_published = int(state["snapshot_published"])
     base_hash = bytes(32) if int(state.get("seq") or 0) == 0 else bytes.fromhex(state["state_hash"])
     delta_payload = cbor({
         KEY_FORMAT: FORMAT,
@@ -425,17 +433,28 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
     delta_gz = gzip_bytes(delta_payload)
     delta_dir = out / "v1" / "delta"
     delta_dir.mkdir(parents=True, exist_ok=True)
-    delta_path = delta_dir / f"{seq}.cbor.gz"
+    delta_path = delta_dir / f"{object_stamp(published)}.cbor.gz"
     delta_path.write_bytes(delta_gz)
-    delta_tuple = [seq, hashlib.sha256(delta_gz).digest(), len(delta_gz)]
+    delta_sha = hashlib.sha256(delta_gz).digest()
+    prior_deltas = [] if snapshot else list(state.get("deltas") or [])
+    prior_deltas.append({
+        "seq": seq,
+        "published": published,
+        "sha256": delta_sha.hex(),
+        "size": len(delta_gz),
+    })
+    delta_tuples = [
+        [int(item["seq"]), bytes.fromhex(item["sha256"]), int(item["size"]), int(item["published"])]
+        for item in prior_deltas
+    ]
     head = cbor({
         KEY_FORMAT: FORMAT,
         KEY_SEQ: seq,
         KEY_PUBLISHED: published,
         KEY_EXPIRES: published + HEAD_TTL_SECONDS,
         KEY_STATE_HASH: digest,
-        KEY_SNAPSHOT: [snapshot_seq, snapshot_sha, snapshot_size],
-        KEY_DELTAS: [] if snapshot else [delta_tuple],
+        KEY_SNAPSHOT: [snapshot_seq, snapshot_sha, snapshot_size, snapshot_published],
+        KEY_DELTAS: [] if snapshot else delta_tuples,
         KEY_POLL_INTERVAL: POLL_INTERVAL_SECONDS,
         KEY_MIN_CLIENT: FORMAT,
     })
@@ -449,9 +468,11 @@ def write_outputs(args: argparse.Namespace, entries: list, upserts: list, remova
         "snapshot": "" if snapshot_path is None else str(snapshot_path),
         "snapshot_sha256": snapshot_sha.hex(),
         "snapshot_size": snapshot_size,
+        "snapshot_published": snapshot_published,
         "delta": str(delta_path),
-        "delta_sha256": hashlib.sha256(delta_gz).hexdigest(),
+        "delta_sha256": delta_sha.hex(),
         "delta_size": len(delta_gz),
+        "deltas": [] if snapshot else prior_deltas,
         "head_payload": str(head_path),
         "entry_count": len(entries),
         "wrote_snapshot": snapshot,
@@ -518,7 +539,8 @@ def main() -> int:
         raise SystemExit("previous entries file is required after the first publish")
     seq = previous_seq + 1
     since_snapshot = seq - int(state.get("snapshot_seq") or 0)
-    snapshot = previous_seq == 0 or since_snapshot >= 24
+    # A snapshot without a published time cannot be named, so write one.
+    snapshot = previous_seq == 0 or since_snapshot >= 24 or not state.get("snapshot_published")
     upserts, removals = diff_entries(old_specs, published_specs)
     previous_count = int(state.get("entry_count") or 0)
     if previous_count and len(published_specs) < previous_count * 0.99:
@@ -553,8 +575,10 @@ def main() -> int:
         "upstream_commit_time": args.upstream_commit_time,
         "state_hash": info["state_hash"],
         "snapshot_seq": seq if info["wrote_snapshot"] else int(state.get("snapshot_seq") or seq),
+        "snapshot_published": info["snapshot_published"],
         "snapshot_sha256": info["snapshot_sha256"],
         "snapshot_size": info["snapshot_size"],
+        "deltas": info["deltas"],
         "published": published_at,
         "entry_count": len(entries),
     }
