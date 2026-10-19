@@ -19,3 +19,7 @@ The R2 objects are:
 - `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/delta/<seq>.cbor.gz`
 
 `head.cose` is uploaded last. Its cache lifetime is 60 minutes, which is the shortest time between publishes. Snapshots and deltas do not change, and their cache lifetime is 30 days.
+
+When a run writes a snapshot, the signed head lists no deltas. Later runs list every delta published since that snapshot. `state.json` keeps that list so the next head can repeat it. A client that cannot apply the whole list downloads the snapshot.
+
+A size hold opens a pull request from `hold/seq-<n>` that sets `publish_oversize` to true. The pull request body contains `Closes #<issue>`. The next ready publish that used the flag sets it back to false in the same commit as `state.json`. High-impact ALL names are not added by that pull request.
