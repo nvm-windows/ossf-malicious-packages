@@ -15,9 +15,7 @@ That identity needs `Artifact Signing Certificate Profile Signer` on the account
 The R2 objects are:
 
 - `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/head.cose`
-- `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/snapshot/<YYYY-MM-DDTHHMMSSZ>.cbor.gz`
-- `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/delta/<YYYY-MM-DDTHHMMSSZ>.cbor.gz`
-
-`head.cose` stays at a fixed name. The client reads it first. Each snapshot tuple is `(seq, sha256, size, published)` and each delta tuple is the same. `published` is Unix seconds. The object name is that instant in UTC as `YYYY-MM-DDTHHMMSSZ`. The client formats `published` and requests that object. A snapshot replaces the delta list. Later hours append one delta tuple each, so the client can fetch every hour since the snapshot.
+- `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/snapshot/<seq>.cbor.gz`
+- `s3://prod-author-cdn/metadata/nvm-windows/malicious_packages/v1/delta/<seq>.cbor.gz`
 
 `head.cose` is uploaded last. Its cache lifetime is 5 minutes. Snapshots and deltas are immutable.
