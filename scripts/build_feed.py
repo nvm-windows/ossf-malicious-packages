@@ -359,6 +359,10 @@ def decode_at(payload: bytes, offset: int):
         length, offset = read_uint(payload, offset, additional)
         end = offset + length
         return payload[offset:end].decode("utf-8"), end
+    if major == 6:
+        tag, offset = read_uint(payload, offset, additional)
+        value, offset = decode_at(payload, offset)
+        return {"tag": tag, "value": value}, offset
     if major == 7 and additional == 22:
         return None, offset
     if major == 4:
@@ -377,6 +381,55 @@ def decode_at(payload: bytes, offset: int):
             mapping[key] = item
         return mapping, offset
     raise ValueError(f"unsupported CBOR major {major}")
+
+
+def extract_cose_payload(raw: bytes) -> bytes:
+    value, offset = decode_at(raw, 0)
+    if offset != len(raw):
+        raise ValueError("trailing bytes in COSE message")
+    if isinstance(value, dict) and value.get("tag") == 18:
+        value = value["value"]
+    if not isinstance(value, list) or len(value) < 3:
+        raise ValueError("COSE_Sign1 array is required")
+    payload = value[2]
+    if not isinstance(payload, (bytes, bytearray)):
+        raise ValueError("COSE_Sign1 payload is missing")
+    return bytes(payload)
+
+
+def rebuild_check(args: argparse.Namespace) -> int:
+    """Compare a full collect against the committed state hash."""
+    specs, stats = collect(args.upstream)
+    published_specs, _holds = apply_policy(specs, stats["mal_ids"], args.policy)
+    entries = sorted_entries(published_specs)
+    digest = state_hash(entries)
+    state = load_state(args.state)
+    previous = bytes.fromhex(state["state_hash"]) if len(state.get("state_hash") or "") == 64 else None
+    status_path = Path(args.out) / "status.json"
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    if previous == digest:
+        status_path.write_text(
+            json.dumps({"outcome": "clean", "state_hash": digest.hex(), "entry_count": len(entries)}, indent=2),
+            encoding="utf-8",
+        )
+        print("clean")
+        return 0
+    old_specs = load_previous_specs(args.previous)
+    upserts, removals = diff_entries(old_specs, published_specs)
+    names = sorted({name for name, _spec in upserts} | set(removals))
+    status = {
+        "outcome": "drift",
+        "state_hash": digest.hex(),
+        "previous_state_hash": state.get("state_hash") or "",
+        "entry_count": len(entries),
+        "differing_names": names[:200],
+        "differing_count": len(names),
+        "upserts": len(upserts),
+        "removals": len(removals),
+    }
+    status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
+    print(f"drift names={len(names)}")
+    return 0
 
 
 def diff_entries(old: dict[str, list], new: dict[str, list]) -> tuple[list, list]:
@@ -492,6 +545,11 @@ def self_test() -> None:
     listed, saved = delta_records(prior, False, [3, bytes.fromhex("bb" * 32), 11])
     if [item[0] for item in listed] != [2, 3] or saved[-1][0] != 3:
         raise SystemExit("deltas since the snapshot were not kept")
+    payload = cbor({KEY_PUBLISHED: 10, KEY_EXPIRES: 20})
+    # COSE_Sign1 tag 18: [protected, unprotected, payload, signature]
+    cose = encode_uint(6, 18) + cbor([b"", {}, payload, b"sig"])
+    if extract_cose_payload(cose) != payload:
+        raise SystemExit("COSE payload extract failed")
     print("self-test ok")
 
 
@@ -507,12 +565,15 @@ def main() -> int:
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--upstream-sha", default="")
     parser.add_argument("--upstream-commit-time", default="")
+    parser.add_argument("--rebuild-check", action="store_true")
     args = parser.parse_args()
     if args.self_test:
         self_test()
         return 0
     if args.upstream is None:
         parser.error("--upstream is required")
+    if args.rebuild_check:
+        return rebuild_check(args)
     specs, stats = collect(args.upstream)
     published_specs, holds = apply_policy(specs, stats["mal_ids"], args.policy)
     considered = max(stats["considered"], 1)

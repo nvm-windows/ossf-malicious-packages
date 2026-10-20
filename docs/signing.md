@@ -23,3 +23,5 @@ The R2 objects are:
 When a run writes a snapshot, the signed head lists no deltas. Later runs list every delta published since that snapshot. `state.json` keeps that list so the next head can repeat it. A client that cannot apply the whole list downloads the snapshot.
 
 A size hold opens a pull request from `hold/seq-<n>` that sets `publish_oversize` to true. The pull request body contains `Closes #<issue>`. The next ready publish that used the flag sets it back to false in the same commit as `state.json`. High-impact ALL names are not added by that pull request.
+
+Daily `rebuild.yml` compares a full collect to `state.json`. Drift opens a `feed-drift` issue and publishes a corrective delta. `watchdog.yml` checks live head age, cache HIT on a second fetch, and reminds holds older than 24 hours. Failed `publish.yml` and `rebuild.yml` runs open or update a `feed-failure` issue.
