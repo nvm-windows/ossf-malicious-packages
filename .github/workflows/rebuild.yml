@@ -1,0 +1,194 @@
+name: Rebuild malicious package feed
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 5 * * *"
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  COSESIGNTOOL_VERSION: "v1.7.6-pre2"
+  COSESIGNTOOL_TOOLS_DIR: ${{ github.workspace }}/.tools/cosesigntool
+
+jobs:
+  rebuild:
+    name: Compare a full rebuild and publish drift
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    environment: publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Clone OpenSSF malicious packages
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --sparse --depth 1 --no-checkout https://github.com/ossf/malicious-packages.git upstream
+          git -C upstream sparse-checkout set --cone osv/malicious/npm osv/withdrawn/npm
+          git -C upstream checkout
+          test -d upstream/osv/malicious/npm
+          test -d upstream/osv/withdrawn/npm
+          git -C upstream rev-parse HEAD > upstream-sha.txt
+          git -C upstream show -s --format=%cI HEAD > upstream-time.txt
+
+      - name: Restore previous entries
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: state/entries.cbor.gz
+          key: feed-entries-${{ hashFiles('state.json') }}
+
+      - name: Compare a full rebuild
+        id: compare
+        run: |
+          set -euo pipefail
+          args=(scripts/build_feed.py --rebuild-check --upstream upstream --policy policy --state state.json --out dist)
+          if [[ -f state/entries.cbor.gz ]]; then
+            args+=(--previous state/entries.cbor.gz)
+          fi
+          python "${args[@]}"
+          outcome="$(python -c 'import json; print(json.load(open("dist/status.json"))["outcome"])')"
+          echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
+
+      - name: Open a drift issue
+        if: steps.compare.outputs.outcome == 'drift'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          status = json.load(open("dist/status.json"))
+          names = status.get("differing_names") or []
+          lines = [
+              "The daily rebuild state hash differs from the incremental feed.",
+              f"Previous: `{status.get('previous_state_hash')}`",
+              f"Rebuild: `{status.get('state_hash')}`",
+              f"Differing names: {status.get('differing_count')} (upserts={status.get('upserts')}, removals={status.get('removals')})",
+              "",
+          ]
+          if names:
+              lines.append("Sample names:")
+              lines.extend(f"- `{name}`" for name in names[:50])
+              if status.get("differing_count", 0) > 50:
+                  lines.append(f"- and {status['differing_count'] - 50} more")
+          open("drift-body.txt", "w", encoding="utf-8").write("\n".join(lines) + "\n")
+          PY
+          gh label create feed-drift --color E4E669 --description "Incremental feed drifted from a full rebuild" || true
+          existing="$(gh issue list --label feed-drift --state open --json number --jq '.[0].number')"
+          if [[ -n "$existing" && "$existing" != "null" ]]; then
+            gh issue comment "$existing" --body-file drift-body.txt
+          else
+            gh issue create --title "Feed rebuild drift" --label feed-drift --body-file drift-body.txt
+          fi
+
+      - name: Build a corrective publish
+        if: steps.compare.outputs.outcome == 'drift'
+        id: build
+        run: |
+          set -euo pipefail
+          published="$(date -u +%s)"
+          sha="$(tr -d '[:space:]' < upstream-sha.txt)"
+          time="$(tr -d '[:space:]' < upstream-time.txt)"
+          args=(scripts/build_feed.py --upstream upstream --policy policy --state state.json --out dist --production --published "$published" --upstream-sha "$sha" --upstream-commit-time "$time")
+          if [[ -f state/entries.cbor.gz ]]; then
+            args+=(--previous state/entries.cbor.gz)
+          fi
+          python "${args[@]}"
+          outcome="$(python -c 'import json; print(json.load(open("dist/status.json"))["outcome"])')"
+          echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
+
+      - name: Install CoseSignTool
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        run: |
+          set -euo pipefail
+          mkdir -p "$COSESIGNTOOL_TOOLS_DIR"
+          zip="$RUNNER_TEMP/CoseSignTool.zip"
+          curl -fsSL -o "$zip" "https://github.com/microsoft/CoseSignTool/releases/download/${COSESIGNTOOL_VERSION}/CoseSignTool-Linux-release.zip"
+          unzip -q "$zip" -d "$RUNNER_TEMP/cosesigntool"
+          found="$(find "$RUNNER_TEMP/cosesigntool" -type f -name CoseSignTool | head -n 1)"
+          test -n "$found"
+          cp -a "$(dirname "$found")/." "$COSESIGNTOOL_TOOLS_DIR/"
+          chmod +x "$COSESIGNTOOL_TOOLS_DIR/CoseSignTool"
+
+      - name: Azure login
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign head.cose
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        env:
+          ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
+          ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}
+          ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+        run: |
+          set -euo pipefail
+          bash scripts/sign-head.sh dist/v1/head-payload.cbor dist/v1/head.cose
+
+      - name: Upload to R2
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        env:
+          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
+          CLOUDFLARE_R2_CDN_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_CDN_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_CDN_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_CDN_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+        run: python scripts/upload_r2.py dist
+
+      - name: Stage entries cache
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        run: |
+          mkdir -p state
+          cp dist/entries.cbor.gz state/entries.cbor.gz
+
+      - name: Save entries for the next diff
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: state/entries.cbor.gz
+          key: feed-entries-${{ hashFiles('dist/state.json') }}
+
+      - name: Commit published state
+        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        run: |
+          set -euo pipefail
+          cp dist/state.json state.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if python -c 'import json,sys; sys.exit(0 if json.load(open("dist/status.json")).get("consumed_oversize") else 1)'; then
+            python - <<'PY'
+            import json
+            from pathlib import Path
+            path = Path("policy/approvals.json")
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["publish_oversize"] = False
+            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            PY
+            git add policy/approvals.json
+          fi
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: record published feed state"
+          git push
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/report_failure.py

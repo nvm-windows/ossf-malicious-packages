@@ -235,3 +235,9 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "chore: record published feed state"
           git push
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/report_failure.py
