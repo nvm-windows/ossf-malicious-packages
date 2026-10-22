@@ -198,6 +198,8 @@ jobs:
           CLOUDFLARE_R2_CDN_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_CDN_ACCESS_KEY_ID }}
           CLOUDFLARE_R2_CDN_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_CDN_SECRET_ACCESS_KEY }}
           CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_CACHE_PURGE_TOKEN: ${{ secrets.CLOUDFLARE_CACHE_PURGE_TOKEN }}
         run: python scripts/upload_r2.py dist
 
       - name: Stage entries cache
@@ -214,7 +216,7 @@ jobs:
           key: feed-entries-${{ hashFiles('dist/state.json') }}
 
       - name: Commit published state
-        if: steps.build.outputs.outcome == 'ready'
+        if: steps.build.outputs.outcome == 'ready' || steps.build.outputs.outcome == 'unchanged'
         run: |
           set -euo pipefail
           cp dist/state.json state.json

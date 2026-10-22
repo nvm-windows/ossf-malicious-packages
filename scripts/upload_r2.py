@@ -6,13 +6,16 @@ from __future__ import annotations
 import datetime
 import hashlib
 import hmac
+import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 BUCKET = "prod-author-cdn"
 PREFIX = "metadata/nvm-windows/malicious_packages"
+HEAD_CDN_URL = "https://cdn.author.io/metadata/nvm-windows/malicious_packages/v1/head.cose"
 
 
 def env(name: str) -> str:
@@ -91,6 +94,33 @@ def put_object(endpoint: str, access_key: str, secret_key: str, key: str, body: 
             raise SystemExit(f"R2 PUT {key} returned {response.status}")
 
 
+def purge_head() -> None:
+    zone = env("CLOUDFLARE_ZONE_ID")
+    token = env("CLOUDFLARE_CACHE_PURGE_TOKEN")
+    if not zone or not token:
+        print("skipping head.cose cache purge: CLOUDFLARE_ZONE_ID or CLOUDFLARE_CACHE_PURGE_TOKEN unset")
+        return
+    body = json.dumps({"files": [HEAD_CDN_URL]}).encode()
+    request = urllib.request.Request(
+        f"https://api.cloudflare.com/client/v4/zones/{zone}/purge_cache",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"Cloudflare purge HTTP {exc.code}: {detail}") from exc
+    if not payload.get("success"):
+        raise SystemExit(f"Cloudflare purge failed: {payload}")
+    print(f"purged {HEAD_CDN_URL}")
+
+
 def main() -> int:
     account = env("CLOUDFLARE_R2_ACCOUNT_ID")
     access_key = env("CLOUDFLARE_R2_CDN_ACCESS_KEY_ID")
@@ -124,6 +154,7 @@ def main() -> int:
         print(f"uploaded {key}")
     put_object(endpoint, access_key, secret_key, f"{PREFIX}/v1/head.cose", head.read_bytes(), "public, max-age=3600")
     print(f"uploaded {PREFIX}/v1/head.cose")
+    purge_head()
     return 0
 
 
