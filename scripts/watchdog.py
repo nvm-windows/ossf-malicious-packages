@@ -164,7 +164,9 @@ def main() -> int:
             file=sys.stderr,
         )
     if body1 != body2:
-        alerts.append("Two head fetches returned different bodies.")
+        # Origin (cache-bust) is the freshness check. The unbust fetch can stay
+        # stale for hours when CLOUDFLARE_CACHE_PURGE_TOKEN is unset.
+        print("edge cache body differs from origin; not failing", file=sys.stderr)
     state_hash = head.get(KEY_STATE_HASH)
     if isinstance(state_hash, (bytes, bytearray)) and state.get("state_hash"):
         if state_hash.hex() != state["state_hash"]:
