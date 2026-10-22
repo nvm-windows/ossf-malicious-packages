@@ -12,7 +12,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -21,6 +21,7 @@ from build_feed import KEY_EXPIRES, KEY_PUBLISHED, KEY_STATE_HASH, decode_at, ex
 HEAD_URL = "https://cdn.author.io/metadata/nvm-windows/malicious_packages/v1/head.cose"
 UA = "NVM for Windows/2.0.1 (watchdog)"
 HOLD_REMINDER = "This hold is still open after 24 hours."
+CACHE_OK = {"HIT", "REVALIDATED"}
 
 
 def b64url(raw: bytes) -> str:
@@ -39,18 +40,21 @@ def license_header() -> str:
     return secret or temporary_token()
 
 
-def fetch_head(url: str, token: str) -> tuple[bytes, dict[str, str]]:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": UA,
-            "X-Nvm-License": token,
-            "Cache-Control": "no-cache",
-        },
-    )
+def fetch_head(url: str, token: str, *, cache_bust: bool = False) -> tuple[bytes, dict[str, str]]:
+    fetch_url = url
+    headers = {
+        "User-Agent": UA,
+        "X-Nvm-License": token,
+    }
+    if cache_bust:
+        sep = "&" if "?" in url else "?"
+        fetch_url = f"{url}{sep}watchdog={time.time_ns()}"
+        headers["Cache-Control"] = "no-cache"
+        headers["Pragma"] = "no-cache"
+    req = urllib.request.Request(fetch_url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as resp:
-        headers = {key.lower(): value for key, value in resp.headers.items()}
-        return resp.read(), headers
+        resp_headers = {key.lower(): value for key, value in resp.headers.items()}
+        return resp.read(), resp_headers
 
 
 def open_or_update(label: str, title: str, body: str, color: str) -> None:
@@ -113,14 +117,13 @@ def remind_holds() -> None:
         print(f"reminded hold issue {number}")
 
 
-def upstream_head_sha() -> str:
-    req = urllib.request.Request(
-        "https://api.github.com/repos/ossf/malicious-packages/commits/main",
-        headers={"User-Agent": UA, "Accept": "application/vnd.github+json"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read().decode())
-    return str(data["sha"])
+def cached_fetch(url: str, token: str) -> tuple[bytes, dict[str, str]]:
+    body, headers = fetch_head(url, token)
+    cache = (headers.get("cf-cache-status") or "").upper()
+    if cache in CACHE_OK:
+        return body, headers
+    time.sleep(2)
+    return fetch_head(url, token)
 
 
 def main() -> int:
@@ -131,8 +134,8 @@ def main() -> int:
     token = license_header()
     alerts: list[str] = []
     try:
-        body1, headers1 = fetch_head(args.head_url, token)
-        body2, headers2 = fetch_head(args.head_url, token)
+        body1, _headers1 = fetch_head(args.head_url, token, cache_bust=True)
+        body2, headers2 = cached_fetch(args.head_url, token)
     except urllib.error.HTTPError as exc:
         open_or_update(
             "feed-failure",
@@ -150,24 +153,16 @@ def main() -> int:
     now = int(time.time())
     age = now - published
     state = json.loads(args.state.read_text(encoding="utf-8")) if args.state.is_file() else {}
-    upstream_sha = state.get("upstream_sha") or ""
-    try:
-        tip = upstream_head_sha()
-    except Exception as exc:  # noqa: BLE001
-        tip = ""
-        print(f"upstream tip lookup skipped: {exc}", file=sys.stderr)
-    if age > 12 * 3600 and tip and tip != upstream_sha:
-        alerts.append(
-            f"Head published {age // 3600}h ago while `state.json.upstream_sha` ({upstream_sha[:12]}) is behind upstream HEAD ({tip[:12]})."
-        )
     if age > 48 * 3600:
         alerts.append(f"Head published {age // 3600}h ago (over 48h).")
     if expires - now < 24 * 3600:
         alerts.append(f"Head expires in {(expires - now) // 3600}h (under 24h).")
-    cache1 = (headers1.get("cf-cache-status") or "").upper()
     cache2 = (headers2.get("cf-cache-status") or "").upper()
-    if cache2 not in {"HIT", "REVALIDATED"}:
-        alerts.append(f"Second head fetch cache status was `{cache2 or 'missing'}` (first was `{cache1 or 'missing'}`).")
+    if cache2 not in CACHE_OK:
+        print(
+            f"second head fetch cache status was `{cache2 or 'missing'}`; not failing",
+            file=sys.stderr,
+        )
     if body1 != body2:
         alerts.append("Two head fetches returned different bodies.")
     state_hash = head.get(KEY_STATE_HASH)

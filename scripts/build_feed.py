@@ -589,6 +589,12 @@ def main() -> int:
     status_path = Path(args.out) / "status.json"
     status_path.parent.mkdir(parents=True, exist_ok=True)
     if previous_hash == digest:
+        next_state = dict(state)
+        if args.upstream_sha:
+            next_state["upstream_sha"] = args.upstream_sha
+        if args.upstream_commit_time:
+            next_state["upstream_commit_time"] = args.upstream_commit_time
+        (Path(args.out) / "state.json").write_text(json.dumps(next_state, indent=2) + "\n", encoding="utf-8")
         status_path.write_text(json.dumps({"outcome": "unchanged", "state_hash": digest.hex()}), encoding="utf-8")
         print("unchanged")
         return 0
