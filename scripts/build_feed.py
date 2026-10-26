@@ -414,6 +414,16 @@ def rebuild_check(args: argparse.Namespace) -> int:
         )
         print("clean")
         return 0
+    if args.previous is None or not args.previous.is_file():
+        status = {
+            "outcome": "missing-previous",
+            "state_hash": digest.hex(),
+            "previous_state_hash": state.get("state_hash") or "",
+            "entry_count": len(entries),
+        }
+        status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
+        print("missing-previous")
+        return 0
     old_specs = load_previous_specs(args.previous)
     upserts, removals = diff_entries(old_specs, published_specs)
     names = sorted({name for name, _spec in upserts} | set(removals))
@@ -599,13 +609,19 @@ def main() -> int:
         print("unchanged")
         return 0
     previous_seq = int(state.get("seq") or 0)
-    old_specs = load_previous_specs(args.previous) if previous_seq else {}
-    if previous_seq and (args.previous is None or not args.previous.is_file()):
-        raise SystemExit("previous entries file is required after the first publish")
+    recovering = bool(previous_seq and (args.previous is None or not args.previous.is_file()))
+    if recovering:
+        print("previous entries cache miss; publishing a recovery snapshot")
+        old_specs = {}
+    else:
+        old_specs = load_previous_specs(args.previous) if previous_seq else {}
     seq = previous_seq + 1
     since_snapshot = seq - int(state.get("snapshot_seq") or 0)
-    snapshot = previous_seq == 0 or since_snapshot >= 24
-    upserts, removals = diff_entries(old_specs, published_specs)
+    snapshot = recovering or previous_seq == 0 or since_snapshot >= 24
+    if recovering:
+        upserts, removals = [], []
+    else:
+        upserts, removals = diff_entries(old_specs, published_specs)
     previous_count = int(state.get("entry_count") or 0)
     if previous_count and len(published_specs) < previous_count * 0.99:
         raise SystemExit("entry count dropped by more than 1 percent")

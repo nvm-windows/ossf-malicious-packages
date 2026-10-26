@@ -154,6 +154,10 @@ def main() -> int:
         print(f"uploaded {key}")
     put_object(endpoint, access_key, secret_key, f"{PREFIX}/v1/head.cose", head.read_bytes(), "public, max-age=3600")
     print(f"uploaded {PREFIX}/v1/head.cose")
+    entries = root / "entries.cbor.gz"
+    if entries.is_file():
+        put_object(endpoint, access_key, secret_key, f"{PREFIX}/entries.cbor.gz", entries.read_bytes(), "public, max-age=3600")
+        print(f"uploaded {PREFIX}/entries.cbor.gz")
     purge_head()
     return 0
 

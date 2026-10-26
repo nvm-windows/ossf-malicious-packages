@@ -96,7 +96,7 @@ jobs:
           fi
 
       - name: Build a corrective publish
-        if: steps.compare.outputs.outcome == 'drift'
+        if: steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous'
         id: build
         run: |
           set -euo pipefail
@@ -112,7 +112,7 @@ jobs:
           echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
 
       - name: Install CoseSignTool
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         run: |
           set -euo pipefail
           mkdir -p "$COSESIGNTOOL_TOOLS_DIR"
@@ -125,7 +125,7 @@ jobs:
           chmod +x "$COSESIGNTOOL_TOOLS_DIR/CoseSignTool"
 
       - name: Azure login
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -133,7 +133,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Sign head.cose
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         env:
           ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
           ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}
@@ -143,7 +143,7 @@ jobs:
           bash scripts/sign-head.sh dist/v1/head-payload.cbor dist/v1/head.cose
 
       - name: Upload to R2
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         env:
           CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
           CLOUDFLARE_R2_CDN_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_CDN_ACCESS_KEY_ID }}
@@ -154,20 +154,20 @@ jobs:
         run: python scripts/upload_r2.py dist
 
       - name: Stage entries cache
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         run: |
           mkdir -p state
           cp dist/entries.cbor.gz state/entries.cbor.gz
 
       - name: Save entries for the next diff
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: state/entries.cbor.gz
           key: feed-entries-${{ hashFiles('dist/state.json') }}
 
       - name: Commit published state
-        if: steps.compare.outputs.outcome == 'drift' && steps.build.outputs.outcome == 'ready'
+        if: (steps.compare.outputs.outcome == 'drift' || steps.compare.outputs.outcome == 'missing-previous') && steps.build.outputs.outcome == 'ready'
         run: |
           set -euo pipefail
           cp dist/state.json state.json
