@@ -1,49 +1,13 @@
 {
   "format": 1,
-  "seq": 10,
-  "upstream_sha": "538fcbc253bb92e02262b4516bbe7f8858ce21fa",
-  "upstream_commit_time": "2026-10-22T16:32:50+00:00",
-  "state_hash": "bfb5fc4004bd12f97ac01926f04e1e04f33ea44cf28adc80776ece11bc141b34",
-  "snapshot_seq": 1,
-  "snapshot_sha256": "4f4125a1b2feba40804d84ea828f41b16e17fa23efe98f6c4353fe4dc964c088",
-  "snapshot_size": 1669915,
-  "published": 1792654788,
-  "entry_count": 222397,
-  "deltas": [
-    [
-      4,
-      "dfca0942fd547b1ff9ad05f43952e6b62f6a69ce52a279baa608ab902787fea3",
-      874
-    ],
-    [
-      5,
-      "f6c852e368185fe37368514acf40a2e709ea32f873357a3aad4e793a98f5e7d7",
-      245
-    ],
-    [
-      6,
-      "c6873c36dd1f2b271f982b473449c4d0cc4808b4d4df3baac659974a13359fd3",
-      250
-    ],
-    [
-      7,
-      "c46341e3a9f2588298422a92a36231f21cc1db5cc5378e498531e01c6de9565c",
-      85
-    ],
-    [
-      8,
-      "ae73ef80f2eeccc318c264590ceb59551468f097897ef59a8993089fb413896f",
-      84
-    ],
-    [
-      9,
-      "acb6fb6f0e1f7b86926961138bb5522884c1a1c612a363d70f0c72786da1d1cd",
-      166
-    ],
-    [
-      10,
-      "279ccef9930c16897ab5568173a1fef447124eae3a928302404382baf698590d",
-      280
-    ]
-  ]
+  "seq": 11,
+  "upstream_sha": "e2f93b255fdc1045e3deefba0ed388ee3d135c1a",
+  "upstream_commit_time": "2026-10-26T18:58:48+00:00",
+  "state_hash": "cb13cd80b6325b3df414efecbb00bc505aed00333f7d0477d8962b5583625ec4",
+  "snapshot_seq": 11,
+  "snapshot_sha256": "9dfa569bb1c942d884d7ec8020caea8747404efb5d8a0ce9946dc1112f149d67",
+  "snapshot_size": 1674900,
+  "published": 1793045078,
+  "entry_count": 222507,
+  "deltas": []
 }
