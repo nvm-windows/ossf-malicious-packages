@@ -1,39 +1,13 @@
 {
   "format": 1,
-  "seq": 18,
-  "upstream_sha": "b0e33573d34460aad6a86136cfe3bccd9b1a4145",
-  "upstream_commit_time": "2026-10-28T15:20:53Z",
-  "state_hash": "b74689c0054f761b74fa2afe8b9bf6abd7a46c181a3cdff8ac537cf0845dbd2c",
-  "snapshot_seq": 13,
-  "snapshot_sha256": "7bab87142ac1b088de4c06934d8e32ae599f2641e2f05fa901f62353995e3980",
-  "snapshot_size": 1674951,
-  "published": 1793187806,
-  "entry_count": 222527,
-  "deltas": [
-    [
-      14,
-      "d60c04832c4e97b2e8021799822c5e03d2ae76fa231ef70ab5ac09831f3418a1",
-      335
-    ],
-    [
-      15,
-      "4b35ec9a12a0ac67c76c21f8ec5a7d233c576831e2255cb024d5ed92b1528f53",
-      123
-    ],
-    [
-      16,
-      "a3fd6588dbfc21df7e141410db49e9ec8d8afec0a60acb8b7d9f8c3c304f75b8",
-      153
-    ],
-    [
-      17,
-      "e3207c0abb8e0c30f208b55ff83a93d0492d12f3e1641a2a3368ecc4a4c7dc7f",
-      266
-    ],
-    [
-      18,
-      "c646a53c34b8642006ea838066f86ad8aaa3457aad4481f3f18dac32fbea490e",
-      113
-    ]
-  ]
+  "seq": 19,
+  "upstream_sha": "a0e379f80074fbcd8a461e506c6c2376d20cc95a",
+  "upstream_commit_time": "2026-10-28T19:20:07Z",
+  "state_hash": "a2ec1a81527aa0f8d2252fbfb7771fab34605538c37f8f31d0b975e2cbcfa39c",
+  "snapshot_seq": 19,
+  "snapshot_sha256": "a986042819779f035953d2b69e5d4045d2643b10fba0e1263652e03808e542dd",
+  "snapshot_size": 1675239,
+  "published": 1793221791,
+  "entry_count": 222532,
+  "deltas": []
 }
