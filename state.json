@@ -1,129 +1,13 @@
 {
   "format": 1,
-  "seq": 55,
-  "upstream_sha": "e39cb5053ace9f276ccacd176f12cd7e3d1330e3",
-  "upstream_commit_time": "2026-11-06T23:20:37Z",
-  "state_hash": "3683fa0f5fef414fad5ec865f4e345ac001f5fd2a9c0e1c92481c31223437588",
-  "snapshot_seq": 32,
-  "snapshot_sha256": "d803e6185dec1745f7a3b4f634930d79d8633dc8847a4246b6b5628475f3e9ca",
-  "snapshot_size": 1676012,
-  "published": 1794019920,
-  "entry_count": 222871,
-  "deltas": [
-    [
-      33,
-      "ad700fb0ed09483d562c0bef3c8c9375c68901e352ac712812760ad10bdd63da",
-      104
-    ],
-    [
-      34,
-      "243010f1fa3ab4fff9b2accebafbf779bbd1a685750052e0116649f9c03accb9",
-      100
-    ],
-    [
-      35,
-      "83b36f8f5a746cf8f4d63afbe5e8b300b6207aeb953ed391ce0db95d30919d5e",
-      497
-    ],
-    [
-      36,
-      "7c1cc06c3cf9a13bfd567f386b38ebe01b2555a59dccfe4d18ed7b0b2fd5b7cb",
-      324
-    ],
-    [
-      37,
-      "073d0987de54b5c10cac39a64cfd25b3ec0cf464f189608b85debe4f3d206d4c",
-      117
-    ],
-    [
-      38,
-      "94aac54ba0ed3ca151de16ebb6cfaea8a0eff8c5367f63b6462350ab5f7b11d8",
-      660
-    ],
-    [
-      39,
-      "dfd114933061bc2205079f7e6b43310db04ced189e960234d80d3177977041a1",
-      477
-    ],
-    [
-      40,
-      "eda6d6e67d09f6a5f4aea58f0a59ddcf80736306facece76d8a053e619026d70",
-      395
-    ],
-    [
-      41,
-      "a469b1870f6e93b682f455384ee60fdf1f6dbdeccd328dbb0f38333bb474a9f2",
-      92
-    ],
-    [
-      42,
-      "c1f48694dcd9f71ec5a83b68bda42e924cde802e3c95d255dceb976fd84e02c2",
-      802
-    ],
-    [
-      43,
-      "04e31d217ea17baae6bad198eb9d52071a5485e7adf2529e333243e46fae343f",
-      363
-    ],
-    [
-      44,
-      "5b7b95b5f86a4c812c4b75e1de150071406b044287222e40036f95437d90a947",
-      726
-    ],
-    [
-      45,
-      "4af59ca140da38c939e1ede59870fa03d2f01d739000ca486408d33c94820fef",
-      232
-    ],
-    [
-      46,
-      "73c8abf161ae9411a708597f1e514cb31a806730d22e86c489a8a060084d2c16",
-      532
-    ],
-    [
-      47,
-      "5baf18a28ac4cc43a8576e8190b45bbe0f89f5af0303fecacf4354db9c23db1b",
-      838
-    ],
-    [
-      48,
-      "00ba15cec63ded3c21f95a8fe923ee1539ff68b8a49b52026eff1c701cf21df6",
-      99
-    ],
-    [
-      49,
-      "61afd2dee2ac04eb446afc2faa61450c3c4d2bba922ff05b466542b648f2c415",
-      207
-    ],
-    [
-      50,
-      "6ca7d95fe2abd3e1275c963be58071ade944469198bc693c801bc562ec8398e8",
-      249
-    ],
-    [
-      51,
-      "f224b70978dddbeecee68ea0de73db6ac2d60c2f001851238c1338935e6cfa51",
-      155
-    ],
-    [
-      52,
-      "38d8c8ffe7a94aaa368faf2170befade70d941ec4129a9e52792ce2f75436f40",
-      189
-    ],
-    [
-      53,
-      "f2000e618ee962fa15d446d31f5e7aedee434579ccdbaf618f4d871dfbcd4698",
-      244
-    ],
-    [
-      54,
-      "6d7451fac9b7132841e78cb7e2959624eb2c3cab74b067d2c8daa360f44a3e12",
-      221
-    ],
-    [
-      55,
-      "d019934b185099a84a7ad88357f6275ee8ef1e2eb829fbfcf7f3bc3cfe8c35a5",
-      107
-    ]
-  ]
+  "seq": 56,
+  "upstream_sha": "1d28cc3f4036c80af284b2194a22e69dc4f323c2",
+  "upstream_commit_time": "2026-11-07T09:19:59Z",
+  "state_hash": "93c4ba880f7cedfe5ce14f68ec8ffdf5d977201e95cd80ff0d1a81625cd12179",
+  "snapshot_seq": 56,
+  "snapshot_sha256": "e0f61e3ecbf74abd7fe096b271ac0dc1b53b4666d450572f1e0951826757d77c",
+  "snapshot_size": 1679071,
+  "published": 1794046590,
+  "entry_count": 222872,
+  "deltas": []
 }
