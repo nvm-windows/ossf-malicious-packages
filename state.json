@@ -1,8 +1,8 @@
 {
   "format": 1,
   "seq": 67,
-  "upstream_sha": "7de1f7b07363863b5951f24fda9889733f9a0381",
-  "upstream_commit_time": "2026-11-11T21:38:51Z",
+  "upstream_sha": "00ba0f9dc1ee64274671d1a3ab183c60990d0435",
+  "upstream_commit_time": "2026-11-12T00:32:28Z",
   "state_hash": "56407744bc218d523736ce2e410f4634b1e6a568f9f601610e8509ebb278076c",
   "snapshot_seq": 58,
   "snapshot_sha256": "a690bc933f9df78c7b6a5bf7195d77134789ff9fe5bad67b89762d1ff87f7767",
